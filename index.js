@@ -4,10 +4,8 @@ var buble = require('./buble')
 var options = {
   target: { chrome: 52 },
   transforms: {
-    arrow: true,
     computedProperty: true,
     conciseMethodProperty: true,
-    destructuring: true,
     templateString: true
   }
 }
