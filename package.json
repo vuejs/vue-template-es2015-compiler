@@ -1,6 +1,6 @@
 {
   "name": "vue-template-es2015-compiler",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "",
   "main": "index.js",
   "author": "Evan You",
