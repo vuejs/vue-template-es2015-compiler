@@ -11966,7 +11966,7 @@ function transform ( source, options ) {
 		ast = parse( source, {
 			ecmaVersion: 7,
 			preserveParens: true,
-			sourceType: transforms.stripWith ? 'script' : 'module',
+			sourceType: 'script',
 			plugins: {
 				jsx: true,
 				objectSpread: true
