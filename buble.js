@@ -6918,7 +6918,7 @@ var Identifier$1 = (function (Node$$1) {
 
 		// rewrite identifiers inside Vue render function `with` blocks
 		if (
-			this.program.inWith &&
+			this.program.inWith > 0 &&
 			// not id of a Declaration
 			!(isDeclaration(this.parent.type) && this.parent.id === this) &&
 			// not a params of a function
@@ -6926,7 +6926,7 @@ var Identifier$1 = (function (Node$$1) {
 			// not a key of Property
 			!(this.parent.type === 'Property' && this.parent.key === this && !this.parent.computed) &&
 			// not a property of a MemberExpression
-			!(this.parent.type === 'MemberExpression' && this.parent.property === this) &&
+			!(this.parent.type === 'MemberExpression' && this.parent.property === this && !this.parent.computed) &&
 			// skip globals + commonly used shorthands
 			!hash[this.name] &&
 			// not already in scope
@@ -10739,7 +10739,7 @@ var Property = (function (Node$$1) {
 
 	Property.prototype.shouldPrefix = function shouldPrefix () {
 		if (
-			this.program.inWith &&
+			this.program.inWith > 0 &&
 			!hash[this.key.name] &&
 			!this.findScope(false).contains(this.key.name)
 		) {
@@ -11228,13 +11228,13 @@ var WithStatement = (function (Node$$1) {
 
   WithStatement.prototype.transpile = function transpile (code, transforms) {
     if (transforms.stripWith) {
-      this.program.inWith = true;
+      this.program.inWith = (this.program.inWith || 0) + 1;
       // remove surrounding with block
       code.remove(this.start, this.body.start + 1);
       code.remove(this.end - 1, this.end);
       code.insertRight(this.start, "var _vm=this;");
       Node$$1.prototype.transpile.call(this, code, transforms);
-      this.program.inWith = false;
+      this.program.inWith--;
     }
   };
 
@@ -11988,4 +11988,3 @@ exports.VERSION = version;
 Object.defineProperty(exports, '__esModule', { value: true });
 
 })));
-//# sourceMappingURL=buble.js.map
