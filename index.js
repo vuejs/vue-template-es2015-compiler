@@ -4,16 +4,21 @@ var buble = require('./buble')
 var options = {
   target: { chrome: 52 },
   transforms: {
+    stripWith: true, // this is a custom feature for stripping with from Vue render functions.
     computedProperty: true,
     conciseMethodProperty: true,
     templateString: true
   }
 }
 
-module.exports = function transpile (code) {
-  // replace "with(this){" with something that works in strict mode
-  code = code.replace(/with\(this\)/g, 'if("__VUE_WITH__")')
-  return buble.transform(code, options).code
-    // add back with
-    .replace(/if\s*\("__VUE_WITH__"\)/g, 'with(this)')
+module.exports = function transpile (code, opts) {
+  if (opts) {
+    opts = Object.assign({}, options, opts)
+    opts.transforms = Object.assign({}, options.transforms, opts.transforms)
+  } else {
+    opts = options
+  }
+  var code = buble.transform(code, opts).code
+  // console.log(code)
+  return code
 }
