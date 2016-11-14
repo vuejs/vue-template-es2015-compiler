@@ -11235,6 +11235,8 @@ var WithStatement = (function (Node$$1) {
       code.insertRight(this.start, "var _vm=this;");
       Node$$1.prototype.transpile.call(this, code, transforms);
       this.program.inWith--;
+    } else {
+      Node$$1.prototype.transpile.call(this, code, transforms);
     }
   };
 
