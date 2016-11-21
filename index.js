@@ -2,12 +2,8 @@ var buble = require('./buble')
 
 // selectively support some handy ES2015 features in templates.
 var options = {
-  target: { chrome: 52 },
   transforms: {
-    stripWith: true, // this is a custom feature for stripping with from Vue render functions.
-    computedProperty: true,
-    conciseMethodProperty: true,
-    templateString: true
+    stripWith: true // this is a custom feature for stripping with from Vue render functions.
   }
 }
 
