@@ -6862,7 +6862,7 @@ var names = 'Infinity,undefined,NaN,isFinite,isNaN,' +
   'Math,Number,Date,Array,Object,Boolean,String,RegExp,Map,Set,JSON,Intl,' +
   'require,' + // for webpack
   'arguments,' + // parsed as identifier but is a special keyword...
-  '_h'; // cached to save property access
+  '_h,_c'; // cached to save property access (_c for ^2.1.5)
 
 var hash = Object.create(null);
 names.split(',').forEach(function ( name ) {
@@ -11234,7 +11234,7 @@ var WithStatement = (function (Node$$1) {
       // remove surrounding with block
       code.remove(this.start, this.body.start + 1);
       code.remove(this.end - 1, this.end);
-      code.insertRight(this.start, "var _vm=this;var _h=_vm.$createElement;");
+      code.insertRight(this.start, "var _vm=this;var _h=_vm.$createElement;var _c=_vm._c;");
       Node$$1.prototype.transpile.call(this, code, transforms);
       this.program.inWith--;
     } else {
