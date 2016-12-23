@@ -11234,7 +11234,7 @@ var WithStatement = (function (Node$$1) {
       // remove surrounding with block
       code.remove(this.start, this.body.start + 1);
       code.remove(this.end - 1, this.end);
-      code.insertRight(this.start, "var _vm=this;var _h=_vm.$createElement;var _c=_vm._c;");
+      code.insertRight(this.start, "var _vm=this;var _h=_vm.$createElement;var _c=_vm._c||_h;");
       Node$$1.prototype.transpile.call(this, code, transforms);
       this.program.inWith--;
     } else {
