@@ -5525,8 +5525,8 @@ var AssignmentExpression = (function (Node$$1) {
 
 	AssignmentExpression.prototype.transpileDestructuring = function transpileDestructuring ( code ) {
 		var scope = this.findScope( true );
-		var value = scope.createIdentifier( 'assign' );
-		var temporaries = [value];
+		var assign = scope.createIdentifier( 'assign' );
+		var temporaries = [ assign ];
 
 		var start = this.start;
 
@@ -5544,7 +5544,7 @@ var AssignmentExpression = (function (Node$$1) {
 			text += string;
 		}
 
-		write( ("(" + value + " = ") );
+		write( ("(" + assign + " = ") );
 		use( this.right );
 
 		// Walk `pattern`, generating code that assigns the value in
@@ -5597,7 +5597,13 @@ var AssignmentExpression = (function (Node$$1) {
 						ref = temp;
 					}
 					elements.forEach( function ( element, i ) {
-						if ( element ) destructure( element, (ref + "[" + i + "]"), false );
+						if ( element ) {
+							if ( element.type === 'RestElement' ) {
+								destructure( element.argument, (ref + ".slice(" + i + ")"), false );
+							} else {
+								destructure( element, (ref + "[" + i + "]"), false );
+							}
+						}
 					} );
 				}
 			}
@@ -5605,7 +5611,9 @@ var AssignmentExpression = (function (Node$$1) {
 			else if ( pattern.type === 'ObjectPattern' ) {
 				var props = pattern.properties;
 				if ( props.length == 1 ) {
-					destructure ( props[0].value, (ref + "." + (props[0].key.name)), false );
+					var prop = props[0];
+					var value = prop.computed || prop.key.type !== 'Identifier' ? (ref + "[" + (code.slice(prop.key.start, prop.key.end)) + "]") : (ref + "." + (prop.key.name));
+					destructure( prop.value, value, false );
 				}
 				else {
 					if ( !mayDuplicate ) {
@@ -5615,7 +5623,8 @@ var AssignmentExpression = (function (Node$$1) {
 						ref = temp$1;
 					}
 					props.forEach( function ( prop ) {
-						destructure( prop.value, (ref + "." + (prop.key.name)), false );
+						var value = prop.computed || prop.key.type !== 'Identifier' ? (ref + "[" + (code.slice(prop.key.start, prop.key.end)) + "]") : (ref + "." + (prop.key.name));
+						destructure( prop.value, value, false );
 					} );
 				}
 			}
@@ -5624,9 +5633,9 @@ var AssignmentExpression = (function (Node$$1) {
 				throw new Error( ("Unexpected node type in destructuring assignment (" + (pattern.type) + ")") );
 			}
 		}
-		destructure( this.left, value, true );
+		destructure( this.left, assign, true );
 
-		code.insertRight( start, text + ')' );
+		code.insertRight( start, (text + ", " + assign + ")") );
 		code.remove( start, this.right.start );
 
 		var statement = this.findNearest( /(?:Statement|Declaration)$/ );
@@ -5706,7 +5715,10 @@ var AssignmentExpression = (function (Node$$1) {
 				var declarators = [];
 				if ( needsObjectVar ) declarators.push( object );
 				if ( needsPropertyVar ) declarators.push( property );
-				code.insertRight( statement.start, ("var " + (declarators.join( ', ' )) + ";\n" + i0) );
+
+				if ( declarators.length ) {
+					code.insertRight( statement.start, ("var " + (declarators.join( ', ' )) + ";\n" + i0) );
+				}
 
 				if ( needsObjectVar && needsPropertyVar ) {
 					code.insertRight( left.start, ("( " + object + " = ") );
@@ -5728,7 +5740,9 @@ var AssignmentExpression = (function (Node$$1) {
 					code.remove( left.property.end, left.end );
 				}
 
-				code.insertLeft( this.end, " )" );
+				if ( needsPropertyVar ) {
+					code.insertLeft( this.end, " )" );
+				}
 			}
 
 			base = object + ( left.computed || needsPropertyVar ? ("[" + property + "]") : ("." + property) );
@@ -5837,7 +5851,18 @@ var CallExpression = (function (Node$$1) {
 			}
 
 			if ( hasSpreadElements ) {
-				if ( this.callee.type === 'MemberExpression' ) {
+
+				// we need to handle super() and super.method() differently
+				// due to its instance
+				var _super = null;
+				if ( this.callee.type === 'Super' ) {
+					_super = this.callee;
+				}
+				else if ( this.callee.type === 'MemberExpression' && this.callee.object.type === 'Super' ) {
+					_super = this.callee.object;
+				}
+
+				if ( !_super && this.callee.type === 'MemberExpression' ) {
 					if ( this.callee.object.type === 'Identifier' ) {
 						context = this.callee.object.name;
 					} else {
@@ -5858,12 +5883,8 @@ var CallExpression = (function (Node$$1) {
 
 				code.insertLeft( this.callee.end, '.apply' );
 
-				// we need to handle `super()` different, because `SuperClass.call.apply`
-				// isn't very helpful
-				var isSuper = this.callee.type === 'Super';
-
-				if ( isSuper ) {
-					this.callee.noCall = true; // bit hacky...
+				if ( _super ) {
+					_super.noCall = true; // bit hacky...
 
 					if ( this.arguments.length > 1 ) {
 						if ( firstArgument.type !== 'SpreadElement' ) {
@@ -5954,6 +5975,8 @@ var ClassBody = (function (Node$$1) {
 				if ( !inFunctionExpression ) code.insertLeft( constructor.end, ';' );
 			}
 
+			var namedFunctions = this.program.options.namedFunctionExpressions !== false;
+			var namedConstructor = namedFunctions || this.parent.superClass || this.parent.type !== 'ClassDeclaration';
 			if ( this.parent.superClass ) {
 				var inheritanceBlock = "if ( " + superName + " ) " + name + ".__proto__ = " + superName + ";\n" + i0 + name + ".prototype = Object.create( " + superName + " && " + superName + ".prototype );\n" + i0 + name + ".prototype.constructor = " + name + ";";
 
@@ -5968,7 +5991,7 @@ var ClassBody = (function (Node$$1) {
 					introBlock += inheritanceBlock + "\n\n" + i0;
 				}
 			} else if ( !constructor ) {
-				var fn$1 = "function " + name + " () {}";
+				var fn$1 = 'function ' + (namedConstructor ? name + ' ' : '') + '() {}';
 				if ( this.parent.type === 'ClassDeclaration' ) fn$1 += ';';
 				if ( this.body.length ) fn$1 += "\n\n" + i0;
 
@@ -5984,7 +6007,8 @@ var ClassBody = (function (Node$$1) {
 
 			this.body.forEach( function ( method, i ) {
 				if ( method.kind === 'constructor' ) {
-					code.overwrite( method.key.start, method.key.end, ("function " + name) );
+					var constructorName = namedConstructor ? ' ' + name : '';
+					code.overwrite( method.key.start, method.key.end, ("function" + constructorName) );
 					return;
 				}
 
@@ -5997,7 +6021,7 @@ var ClassBody = (function (Node$$1) {
 				var lhs;
 
 				var methodName = method.key.name;
-				if ( scope.contains( methodName ) || reserved[ methodName ] ) methodName = scope.createIdentifier( methodName );
+				if ( reserved[ methodName ] ) methodName = scope.createIdentifier( methodName );
 
 				// when method name is a string or a number let's pretend it's a computed method
 
@@ -6051,7 +6075,7 @@ var ClassBody = (function (Node$$1) {
 
 				code.insertRight( method.start, lhs );
 
-				var rhs = ( isAccessor ? ("." + (method.kind)) : '' ) + " = function" + ( method.value.generator ? '* ' : ' ' ) + ( method.computed || isAccessor ? '' : (methodName + " ") );
+				var rhs = ( isAccessor ? ("." + (method.kind)) : '' ) + " = function" + ( method.value.generator ? '* ' : ' ' ) + ( method.computed || isAccessor || !namedFunctions ? '' : (methodName + " ") );
 				code.remove( c, method.value.start );
 				code.insertRight( method.value.start, rhs );
 				code.insertLeft( method.end, ';' );
@@ -6104,16 +6128,23 @@ function deindent ( node, code ) {
 	var end = node.end;
 
 	var indentStr = code.getIndentString();
-	var pattern = new RegExp( indentStr + '\\S', 'g' );
+	var indentStrLen = indentStr.length;
+	var indentStart = start - indentStrLen;
 
-	if ( code.original.slice( start - indentStr.length, start ) === indentStr ) {
-		code.remove( start - indentStr.length, start );
+	if ( !node.program.indentExclusions[ indentStart ]
+	&& code.original.slice( indentStart, start ) === indentStr ) {
+		code.remove( indentStart, start );
 	}
 
+	var pattern = new RegExp( indentStr + '\\S', 'g' );
 	var slice = code.original.slice( start, end );
 	var match;
+
 	while ( match = pattern.exec( slice ) ) {
-		if ( !node.program.indentExclusions[ match.index ] ) code.remove( start + match.index, start + match.index + indentStr.length );
+		var removeStart = start + match.index;
+		if ( !node.program.indentExclusions[ removeStart ] ) {
+			code.remove( removeStart, removeStart + indentStrLen );
+		}
 	}
 }
 
@@ -6373,7 +6404,7 @@ var LoopStatement = (function (Node$$1) {
 
 				var insert = "{\n" + i1 + "var " + returned + " = " + loop + "(" + argString + ");\n";
 				if ( this.canBreak ) insert += "\n" + i1 + "if ( " + returned + " === 'break' ) break;";
-				if ( this.canReturn ) insert += "\n" + i1 + "if ( " + returned + " ) return returned.v;";
+				if ( this.canReturn ) insert += "\n" + i1 + "if ( " + returned + " ) return " + returned + ".v;";
 				insert += "\n" + i0 + "}";
 
 				code.insertRight( this.body.end, insert );
@@ -6555,7 +6586,11 @@ function destructureArrayPattern ( code, scope, node, ref, inline, statementGene
 	node.elements.forEach( function ( element, i ) {
 		if ( !element ) return;
 
-		handleProperty( code, scope, c, element, (ref + "[" + i + "]"), inline, statementGenerators );
+		if ( element.type === 'RestElement' ) {
+			handleProperty( code, scope, c, element.argument, (ref + ".slice(" + i + ")"), inline, statementGenerators );
+		} else {
+			handleProperty( code, scope, c, element, (ref + "[" + i + "]"), inline, statementGenerators );
+		}
 		c = element.end;
 	});
 
@@ -6566,7 +6601,7 @@ function destructureObjectPattern ( code, scope, node, ref, inline, statementGen
 	var c = node.start;
 
 	node.properties.forEach( function ( prop ) {
-		var value = prop.key.type === 'Literal' ? (ref + "[" + (prop.key.raw) + "]") : (ref + "." + (prop.key.name));
+		var value = prop.computed || prop.key.type !== 'Identifier' ? (ref + "[" + (code.slice(prop.key.start, prop.key.end)) + "]") : (ref + "." + (prop.key.name));
 		handleProperty( code, scope, c, prop.value, value, inline, statementGenerators );
 		c = prop.end;
 	});
@@ -6635,12 +6670,14 @@ function handleProperty ( code, scope, c, node, value, inline, statementGenerato
 				});
 
 				node.properties.forEach( function ( prop ) {
-					handleProperty( code, scope, c, prop.value, (ref + "." + (prop.key.name)), inline, statementGenerators );
+					var value = prop.computed || prop.key.type !== 'Identifier' ? (ref + "[" + (code.slice(prop.key.start, prop.key.end)) + "]") : (ref + "." + (prop.key.name));
+					handleProperty( code, scope, c, prop.value, value, inline, statementGenerators );
 					c = prop.end;
 				});
 			} else {
 				var prop = node.properties[0];
-				handleProperty( code, scope, c, prop.value, (value + "." + (prop.key.name)), inline, statementGenerators );
+				var value_suffix = prop.computed || prop.key.type !== 'Identifier' ? ("[" + (code.slice(prop.key.start, prop.key.end)) + "]") : ("." + (prop.key.name));
+				handleProperty( code, scope, c, prop.value, ("" + value + value_suffix), inline, statementGenerators );
 				c = prop.end;
 			}
 
@@ -6665,13 +6702,21 @@ function handleProperty ( code, scope, c, node, value, inline, statementGenerato
 				node.elements.forEach( function ( element, i ) {
 					if ( !element ) return;
 
-					handleProperty( code, scope, c, element, (ref$1 + "[" + i + "]"), inline, statementGenerators );
+					if ( element.type === 'RestElement' ) {
+						handleProperty( code, scope, c, element.argument, (ref$1 + ".slice(" + i + ")"), inline, statementGenerators );
+					} else {
+						handleProperty( code, scope, c, element, (ref$1 + "[" + i + "]"), inline, statementGenerators );
+					}
 					c = element.end;
 				});
 			} else {
 				var index = findIndex( node.elements, Boolean );
 				var element = node.elements[ index ];
-				handleProperty( code, scope, c, element, (value + "[" + index + "]"), inline, statementGenerators );
+				if ( element.type === 'RestElement' ) {
+					handleProperty( code, scope, c, element.argument, (value + ".slice(" + index + ")"), inline, statementGenerators );
+				} else {
+					handleProperty( code, scope, c, element, (value + "[" + index + "]"), inline, statementGenerators );
+				}
 				c = element.end;
 			}
 
@@ -6812,6 +6857,55 @@ var FunctionExpression = (function (Node$$1) {
 		}
 
 		Node$$1.prototype.initialise.call( this, transforms );
+
+		var parent = this.parent;
+		var methodName;
+
+		if ( transforms.conciseMethodProperty
+				&& parent.type === 'Property'
+				&& parent.kind === 'init'
+				&& parent.method
+				&& parent.key.type === 'Identifier' ) {
+			// object literal concise method
+			methodName = parent.key.name;
+		}
+		else if ( transforms.classes
+				&& parent.type === 'MethodDefinition'
+				&& parent.kind === 'method'
+				&& parent.key.type === 'Identifier' ) {
+			// method definition in a class
+			methodName = parent.key.name;
+		}
+		else if ( this.id && this.id.type === 'Identifier' ) {
+			// naked function expression
+			methodName = this.id.alias || this.id.name;
+		}
+
+		if ( methodName ) {
+			for ( var i = 0, list = this.params; i < list.length; i += 1 ) {
+				var param = list[i];
+
+				if ( param.type === 'Identifier' && methodName === param.name ) {
+					// workaround for Safari 9/WebKit bug:
+					// https://gitlab.com/Rich-Harris/buble/issues/154
+					// change parameter name when same as method name
+
+					var scope = this.body.scope;
+					var declaration = scope.declarations[ methodName ];
+
+					var alias = scope.createIdentifier( methodName );
+					param.alias = alias;
+
+					for ( var i$1 = 0, list$1 = declaration.instances; i$1 < list$1.length; i$1 += 1 ) {
+						var identifier = list$1[i$1];
+
+						identifier.alias = alias;
+					}
+
+					break;
+				}
+			}
+		}
 	};
 
 	return FunctionExpression;
@@ -7225,10 +7319,10 @@ var JSXOpeningElement = (function (Node$$1) {
 				if ( len === 1 ) {
 					before = html ? "'," : ',';
 				} else {
-					if (!this.program.objectAssign) {
+					if (!this.program.options.objectAssign) {
 						throw new CompileError( this, 'Mixed JSX attributes ending in spread requires specified objectAssign option with \'Object.assign\' or polyfill helper.' );
 					}
-					before = html ? ("', " + (this.program.objectAssign) + "({},") : (", " + (this.program.objectAssign) + "({},");
+					before = html ? ("', " + (this.program.options.objectAssign) + "({},") : (", " + (this.program.options.objectAssign) + "({},");
 					after = ')';
 				}
 			} else {
@@ -7278,7 +7372,7 @@ var JSXSpreadAttribute = (function (Node$$1) {
 }(Node));
 
 var regenerate = __commonjs(function (module, exports, global) {
-/*! https://mths.be/regenerate v1.3.1 by @mathias | MIT license */
+/*! https://mths.be/regenerate v1.3.2 by @mathias | MIT license */
 (function(root) {
 
 	// Detect free variables `exports`.
@@ -8173,14 +8267,10 @@ var regenerate = __commonjs(function (module, exports, global) {
 		var end;
 		var startHigh;
 		var startLow;
-		var prevStartHigh = 0;
-		var prevEndHigh = 0;
-		var tmpLow = [];
 		var endHigh;
 		var endLow;
 		var surrogateMappings = [];
 		var length = data.length;
-		var dataHigh = [];
 		while (index < length) {
 			start = data[index];
 			end = data[index + 1] - 1;
@@ -8238,9 +8328,6 @@ var regenerate = __commonjs(function (module, exports, global) {
 				]);
 			}
 
-			prevStartHigh = startHigh;
-			prevEndHigh = endHigh;
-
 			index += 2;
 		}
 
@@ -8281,7 +8368,6 @@ var regenerate = __commonjs(function (module, exports, global) {
 		var loneLowSurrogates = parts.loneLowSurrogates;
 		var bmp = parts.bmp;
 		var astral = parts.astral;
-		var hasAstral = !dataIsEmpty(parts.astral);
 		var hasLoneHighSurrogates = !dataIsEmpty(loneHighSurrogates);
 		var hasLoneLowSurrogates = !dataIsEmpty(loneLowSurrogates);
 
@@ -8340,7 +8426,7 @@ var regenerate = __commonjs(function (module, exports, global) {
 		return (new regenerate).add(value);
 	};
 
-	regenerate.version = '1.3.1';
+	regenerate.version = '1.3.2';
 
 	var proto = regenerate.prototype;
 	extend(proto, {
@@ -10473,6 +10559,12 @@ var Literal = (function (Node$$1) {
 	Literal.prototype = Object.create( Node$$1 && Node$$1.prototype );
 	Literal.prototype.constructor = Literal;
 
+	Literal.prototype.initialise = function initialise () {
+		if ( typeof this.value === 'string' ) {
+			this.program.indentExclusionElements.push( this );
+		}
+	};
+
 	Literal.prototype.transpile = function transpile ( code, transforms ) {
 		if ( transforms.numericLiteral ) {
 			var leading = this.raw.slice( 0, 2 );
@@ -10578,41 +10670,51 @@ var ObjectExpression = (function (Node$$1) {
 
 		Node$$1.prototype.transpile.call( this, code, transforms );
 
+		var firstPropertyStart = this.start + 1;
+		var regularPropertyCount = 0;
 		var spreadPropertyCount = 0;
 		var computedPropertyCount = 0;
 
 		for ( var i$2 = 0, list = this.properties; i$2 < list.length; i$2 += 1 ) {
 			var prop = list[i$2];
 
-			if ( prop.type === 'SpreadProperty' ) spreadPropertyCount += 1;
-			if ( prop.computed ) computedPropertyCount += 1;
+			if ( prop.type === 'SpreadProperty' ) {
+				spreadPropertyCount += 1;
+			} else if ( prop.computed ) {
+				computedPropertyCount += 1;
+			} else if ( prop.type === 'Property' ) {
+				regularPropertyCount += 1;
+			}
 		}
 
 		if ( spreadPropertyCount ) {
-			if ( !this.program.objectAssign ) {
+			if ( !this.program.options.objectAssign ) {
 				throw new CompileError( this, 'Object spread operator requires specified objectAssign option with \'Object.assign\' or polyfill helper.' );
 			}
 			// enclose run of non-spread properties in curlies
 			var i = this.properties.length;
-			while ( i-- ) {
-				var prop$1 = this$1.properties[i];
+			if ( regularPropertyCount ) {
+				while ( i-- ) {
+					var prop$1 = this$1.properties[i];
 
-				if ( prop$1.type === 'Property' ) {
-					var lastProp = this$1.properties[ i - 1 ];
-					var nextProp = this$1.properties[ i + 1 ];
+					if ( prop$1.type === 'Property' && !prop$1.computed ) {
+						var lastProp = this$1.properties[ i - 1 ];
+						var nextProp = this$1.properties[ i + 1 ];
 
-					if ( !lastProp || lastProp.type !== 'Property' ) {
-						code.insertRight( prop$1.start, '{' );
-					}
+						if ( !lastProp || lastProp.type !== 'Property' || lastProp.computed ) {
+							code.insertRight( prop$1.start, '{' );
+						}
 
-					if ( !nextProp || nextProp.type !== 'Property' ) {
-						code.insertLeft( prop$1.end, '}' );
+						if ( !nextProp || nextProp.type !== 'Property' || nextProp.computed ) {
+							code.insertLeft( prop$1.end, '}' );
+						}
 					}
 				}
 			}
 
 			// wrap the whole thing in Object.assign
-			code.overwrite( this.start, this.properties[0].start, ((this.program.objectAssign) + "({}, "));
+			firstPropertyStart = this.properties[0].start;
+			code.overwrite( this.start, firstPropertyStart, ((this.program.options.objectAssign) + "({}, "));
 			code.overwrite( this.properties[ this.properties.length - 1 ].end, this.end, ')' );
 		}
 
@@ -10622,13 +10724,13 @@ var ObjectExpression = (function (Node$$1) {
 			var isSimpleAssignment;
 			var name;
 
-			var start;
-			var end;
-
 			if ( this.parent.type === 'VariableDeclarator' && this.parent.parent.declarations.length === 1 ) {
 				isSimpleAssignment = true;
 				name = this.parent.id.alias || this.parent.id.name; // TODO is this right?
 			} else if ( this.parent.type === 'AssignmentExpression' && this.parent.parent.type === 'ExpressionStatement' && this.parent.left.type === 'Identifier' ) {
+				isSimpleAssignment = true;
+				name = this.parent.left.alias || this.parent.left.name; // TODO is this right?
+			} else if ( this.parent.type === 'AssignmentPattern' && this.parent.left.type === 'Identifier' ) {
 				isSimpleAssignment = true;
 				name = this.parent.left.alias || this.parent.left.name; // TODO is this right?
 			}
@@ -10637,8 +10739,8 @@ var ObjectExpression = (function (Node$$1) {
 			var declaration = this.findScope( false ).findDeclaration( name );
 			if ( declaration ) name = declaration.name;
 
-			start = this.start + 1;
-			end = this.end;
+			var start = firstPropertyStart;
+			var end = this.end;
 
 			if ( isSimpleAssignment ) {
 				// ???
@@ -10646,13 +10748,14 @@ var ObjectExpression = (function (Node$$1) {
 				name = this.findScope( true ).createIdentifier( '_obj' );
 
 				var statement = this.findNearest( /(?:Statement|Declaration)$/ );
-				code.insertRight( statement.start, ("var " + name + ";\n" + i0) );
+				code.insertLeft( statement.end, ("\n" + i0 + "var " + name + ";") );
 
 				code.insertRight( this.start, ("( " + name + " = ") );
 			}
 
 			var len = this.properties.length;
 			var lastComputedProp;
+			var sawNonComputedProperty = false;
 
 			for ( var i$1 = 0; i$1 < len; i$1 += 1 ) {
 				var prop$2 = this$1.properties[i$1];
@@ -10677,7 +10780,7 @@ var ObjectExpression = (function (Node$$1) {
 					code.insertLeft( c, ' = ' );
 					code.move( moveStart, prop$2.end, end );
 
-					if ( i$1 === 0 && len > 1 ) {
+					if ( i$1 < len - 1 && ! sawNonComputedProperty ) {
 						// remove trailing comma
 						c = prop$2.end;
 						while ( code.original[c] !== ',' ) c += 1;
@@ -10688,6 +10791,8 @@ var ObjectExpression = (function (Node$$1) {
 					if ( prop$2.method && transforms.conciseMethodProperty ) {
 						code.insertRight( prop$2.value.start, 'function ' );
 					}
+				} else {
+					sawNonComputedProperty = true;
 				}
 			}
 
@@ -10722,8 +10827,14 @@ var Property = (function (Node$$1) {
 				var name;
 				if ( this.key.type === 'Literal' && typeof this.key.value === 'number' ) {
 					name = "";
+				} else if ( this.key.type === 'Identifier' ) {
+					if ( reserved[ this.key.name ] || ! /^[a-z_$][a-z0-9_$]*$/i.test( this.key.name ) ) {
+						name = this.findScope( true ).createIdentifier( this.key.name );
+					} else {
+						name = this.key.name;
+					}
 				} else {
-					name = this.findScope( true ).createIdentifier( this.key.type === 'Identifier' ? this.key.name : this.key.value );
+					name = this.findScope( true ).createIdentifier( this.key.value );
 				}
 
 				if ( this.value.generator ) code.remove( this.start, this.key.start );
@@ -10939,7 +11050,7 @@ var TemplateElement = (function (Node$$1) {
 	TemplateElement.prototype.constructor = TemplateElement;
 
 	TemplateElement.prototype.initialise = function initialise () {
-		this.program.templateElements.push( this );
+		this.program.indentExclusionElements.push( this );
 	};
 
 	return TemplateElement;
@@ -10983,6 +11094,7 @@ var TemplateLiteral = (function (Node$$1) {
 
 			var parenthesise = ( this.quasis.length !== 1 || this.expressions.length !== 0 ) &&
 			                     this.parent.type !== 'AssignmentExpression' &&
+			                     this.parent.type !== 'AssignmentPattern' &&
 			                     this.parent.type !== 'VariableDeclarator' &&
 			                     ( this.parent.type !== 'BinaryExpression' || this.parent.operator !== '+' );
 
@@ -11039,11 +11151,9 @@ var ThisExpression = (function (Node$$1) {
 			var arrowFunction = this.findNearest( 'ArrowFunctionExpression' );
 			var loop = this.findNearest( loopStatement );
 
-			if ( arrowFunction && arrowFunction.depth > lexicalBoundary.depth ) {
-				this.alias = lexicalBoundary.getThisAlias();
-			}
-
-			if ( loop && loop.body.contains( this ) && loop.depth > lexicalBoundary.depth ) {
+			if ( ( arrowFunction && arrowFunction.depth > lexicalBoundary.depth )
+			|| ( loop && loop.body.contains( this ) && loop.depth > lexicalBoundary.depth )
+			|| ( loop && loop.right && loop.right.contains( this ) ) ) {
 				this.alias = lexicalBoundary.getThisAlias();
 			}
 		}
@@ -11072,6 +11182,12 @@ var UpdateExpression = (function (Node$$1) {
 			var declaration = this.findScope( false ).findDeclaration( this.argument.name );
 			if ( declaration && declaration.kind === 'const' ) {
 				throw new CompileError( this, ((this.argument.name) + " is read-only") );
+			}
+
+			// special case – https://gitlab.com/Rich-Harris/buble/issues/150
+			var statement = declaration && declaration.node.ancestor( 3 );
+			if ( statement && statement.type === 'ForStatement' && statement.body.contains( this ) ) {
+				statement.reassigned[ this.argument.name ] = true;
 			}
 		}
 
@@ -11203,6 +11319,7 @@ var VariableDeclarator = (function (Node$$1) {
 			}
 		}
 
+		if ( this.id ) this.id.transpile( code, transforms );
 		if ( this.init ) this.init.transpile( code, transforms );
 	};
 
@@ -11338,7 +11455,7 @@ function wrap ( raw, parent ) {
 		};
 	}
 
-	Node( raw, parent );
+	new Node( raw, parent );
 
 	var type = ( raw.type === 'BlockStatement' ? BlockStatement : types[ raw.type ] ) || Node;
 	raw.__proto__ = type.prototype;
@@ -11780,7 +11897,7 @@ function Program ( source, ast, transforms, options ) {
 
 	// options
 	this.jsx = options.jsx || 'React.createElement';
-	this.objectAssign = options.objectAssign;
+	this.options = options;
 
 	this.source = source;
 	this.magicString = new MagicString( source );
@@ -11791,15 +11908,15 @@ function Program ( source, ast, transforms, options ) {
 	wrap( this.body = ast, this );
 	this.body.__proto__ = BlockStatement.prototype;
 
-	this.templateElements = [];
+	this.indentExclusionElements = [];
 	this.body.initialise( transforms );
 
-	this.indentExclusions = {};
-	for ( var i$1 = 0, list = this.templateElements; i$1 < list.length; i$1 += 1 ) {
+	this.indentExclusions = Object.create( null );
+	for ( var i$1 = 0, list = this.indentExclusionElements; i$1 < list.length; i$1 += 1 ) {
 		var node = list[i$1];
 
 		for ( var i = node.start; i < node.end; i += 1 ) {
-			this$1.indentExclusions[ node.start + i ] = true;
+			this$1.indentExclusions[ i ] = true;
 		}
 	}
 
@@ -11907,7 +12024,7 @@ var features = [
 	'reservedProperties'
 ];
 
-var version = "0.14.2";
+var version = "0.15.1";
 
 var ref = [
 	acornObjectSpread,
@@ -11964,6 +12081,12 @@ function transform ( source, options ) {
 		if ( !( name in transforms ) ) throw new Error( ("Unknown transform '" + name + "'") );
 		transforms[ name ] = options.transforms[ name ];
 	});
+
+	if (transforms.stripWith) {
+		// necessary for { key } to be prefixed properly
+		// in case the user uses a target environment that supports this
+		transforms.conciseMethodProperty = true;
+	}
 
 	var ast;
 	try {
