@@ -7023,6 +7023,8 @@ var Identifier$1 = (function (Node$$1) {
 			!(this.parent.type === 'Property' && this.parent.key === this && !this.parent.computed) &&
 			// not a property of a MemberExpression
 			!(this.parent.type === 'MemberExpression' && this.parent.property === this && !this.parent.computed) &&
+			// not in an Array destructure pattern
+			!(this.parent.type === 'ArrayPattern') &&
 			// skip globals + commonly used shorthands
 			!hash[this.name] &&
 			// not already in scope
