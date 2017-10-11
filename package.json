@@ -20,6 +20,9 @@
     "vue-template-compiler": "^2.4.4"
   },
   "jest": {
-    "testPathIgnorePatterns": ["/node_modules/", "/buble/"]
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/buble/"
+    ]
   }
 }
