@@ -10,7 +10,7 @@
     "buble.js"
   ],
   "scripts": {
-    "build": "cd buble && npm run build && cp dist/buble.deps.js ../buble.js",
+    "build": "cd buble && npm run build && cp dist/buble.umd.js ../buble.js",
     "test": "jest",
     "prepublishOnly": "npm run build"
   },
