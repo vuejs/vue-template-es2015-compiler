@@ -2,10 +2,12 @@ const transpile = require('./index')
 const Vue = require('vue')
 const { compile } = require('vue-template-compiler')
 
+process.env.BAR = 'bar'
+
 test('should work', () => {
   const res = compile(`
     <div>
-      <div>{{ foo }}</div>
+      <div>{{ foo }} {{ process.env.BAR }}</div>
       <div v-for="{ name } in items">{{ name }}</div>
     </div>
   `)
@@ -28,5 +30,5 @@ test('should work', () => {
     staticRenderFns: res.staticRenderFns.map(toFunction)
   }).$mount()
 
-  expect(vm.$el.innerHTML).toMatch(`<div>hello</div> <div>foo</div><div>bar</div>`)
+  expect(vm.$el.innerHTML).toMatch(`<div>hello bar</div> <div>foo</div><div>bar</div>`)
 })
