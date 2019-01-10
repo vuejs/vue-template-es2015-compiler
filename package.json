@@ -12,7 +12,7 @@
   "scripts": {
     "build": "cd buble && npm run build && cp dist/buble.umd.js ../buble.js",
     "test": "jest",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "jest && npm run build"
   },
   "devDependencies": {
     "jest": "^21.2.1",
