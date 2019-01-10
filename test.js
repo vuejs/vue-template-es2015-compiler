@@ -9,6 +9,7 @@ test('should work', () => {
     <div>
       <div>{{ foo }} {{ process.env.BAR }}</div>
       <div v-for="{ name } in items">{{ name }}</div>
+      <div v-bind="{ ...a, ...b }"/>
     </div>
   `)
 
@@ -24,11 +25,17 @@ test('should work', () => {
       items: [
         { name: 'foo' },
         { name: 'bar' }
-      ]
+      ],
+      a: { id: 'foo' },
+      b: { class: 'bar' }
     },
     render: toFunction(res.render),
     staticRenderFns: res.staticRenderFns.map(toFunction)
   }).$mount()
 
-  expect(vm.$el.innerHTML).toMatch(`<div>hello bar</div> <div>foo</div><div>bar</div>`)
+  expect(vm.$el.innerHTML).toMatch(
+    `<div>hello bar</div> ` +
+    `<div>foo</div><div>bar</div> ` +
+    `<div id="foo" class="bar"></div>`
+  )
 })
