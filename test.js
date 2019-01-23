@@ -37,3 +37,11 @@ test('should work', () => {
     `<div id="foo" class="bar"></div>`
   )
 })
+
+test('arg spread', () => {
+  const res = compile(`
+    <button @click="(...args) => { store.foo(...args) }">Go</button>
+  `)
+  const code = transpile(`function render() {${res.render}}`)
+  expect(code).toMatch(`_vm.store.foo.apply(_vm.store, args)`)
+})
