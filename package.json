@@ -10,14 +10,14 @@
     "buble.js"
   ],
   "scripts": {
-    "build": "cd buble && npm run build && cp dist/buble.umd.js ../buble.js",
+    "build": "cd buble && npm run build && cp dist/buble-browser-deps.umd.js ../buble.js",
     "test": "jest",
     "prepublishOnly": "jest && npm run build"
   },
   "devDependencies": {
-    "jest": "^21.2.1",
-    "vue": "^2.4.4",
-    "vue-template-compiler": "^2.4.4"
+    "jest": "^24.1.0",
+    "vue": "^2.6.0",
+    "vue-template-compiler": "^2.6.0"
   },
   "repository": {
     "type": "git",
