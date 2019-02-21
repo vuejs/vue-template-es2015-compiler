@@ -1,6 +1,6 @@
 {
   "name": "vue-template-es2015-compiler",
-  "version": "1.8.2",
+  "version": "1.9.0",
   "description": "Post compiler for Vue template render functions to support ES2015+ features",
   "main": "index.js",
   "author": "Evan You",
