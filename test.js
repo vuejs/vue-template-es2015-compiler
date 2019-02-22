@@ -87,3 +87,14 @@ test('trailing function comma', () => {
   vm.$el.click()
   expect(spy).toHaveBeenCalled()
 })
+
+test('v-model code', () => {
+  const vm = new Vue({
+    ...compileAsFunctions(`
+      <input v-model="text" />
+    `),
+    data: {
+      text: 'foo'
+    }
+  }).$mount()
+})
